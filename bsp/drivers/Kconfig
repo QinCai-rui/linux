@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+menu "Device Drivers"
+
+# Minimal System
+source "$(BSP_TOP)drivers/clk/Kconfig"
+source "$(BSP_TOP)drivers/pinctrl/Kconfig"
+source "$(BSP_TOP)drivers/uart/Kconfig"
+source "$(BSP_TOP)drivers/timer/Kconfig"
+
+# Basic System
+source "$(BSP_TOP)drivers/dma/Kconfig"
+source "$(BSP_TOP)drivers/rtc/Kconfig"
+source "$(BSP_TOP)drivers/bus/Kconfig"
+source "$(BSP_TOP)drivers/dumpreg/Kconfig"
+source "$(BSP_TOP)drivers/iommu/Kconfig"
+
+# Storage
+source "$(BSP_TOP)drivers/mmc/Kconfig"
+source "$(BSP_TOP)drivers/ufs/Kconfig"
+source "$(BSP_TOP)drivers/mtd/Kconfig"
+source "$(BSP_TOP)drivers/redeposit/Kconfig"
+
+# Graphics
+source "$(BSP_TOP)drivers/g2d/Kconfig"
+source "$(BSP_TOP)drivers/di/Kconfig"
+source "$(BSP_TOP)drivers/vin/Kconfig"
+source "$(BSP_TOP)drivers/vfe/Kconfig"
+source "$(BSP_TOP)drivers/drm/Kconfig"
+
+# Multi-Media
+source "$(BSP_TOP)drivers/ve/Kconfig"
+
+# Audio
+source "$(BSP_TOP)drivers/sound/Kconfig"
+
+# Security
+source "$(BSP_TOP)drivers/ce/Kconfig"
+source "$(BSP_TOP)drivers/smc/Kconfig"
+source "$(BSP_TOP)drivers/sid/Kconfig"
+source "$(BSP_TOP)drivers/drm_heap/Kconfig"
+
+# I/O Connectivity
+source "$(BSP_TOP)drivers/pcie/Kconfig"
+source "$(BSP_TOP)drivers/phy/Kconfig"
+source "$(BSP_TOP)drivers/gmac/Kconfig"
+source "$(BSP_TOP)drivers/stmmac/Kconfig"
+source "$(BSP_TOP)drivers/usb/Kconfig"
+source "$(BSP_TOP)drivers/twi/Kconfig"
+source "$(BSP_TOP)drivers/spi-ng/Kconfig"
+source "$(BSP_TOP)drivers/pwm/Kconfig"
+source "$(BSP_TOP)drivers/input/Kconfig"
+
+# Wireless
+source "$(BSP_TOP)drivers/net/Kconfig"
+
+# Power Management
+source "$(BSP_TOP)drivers/irqchip/Kconfig"
+source "$(BSP_TOP)drivers/standby/Kconfig"
+source "$(BSP_TOP)drivers/thermal/Kconfig"
+source "$(BSP_TOP)drivers/nvmem/Kconfig"
+source "$(BSP_TOP)drivers/pm_domain/Kconfig"
+source "$(BSP_TOP)drivers/power/Kconfig"
+source "$(BSP_TOP)drivers/cpufreq/Kconfig"
+source "$(BSP_TOP)drivers/devfreq/Kconfig"
+
+# Misc
+source "$(BSP_TOP)drivers/misc/Kconfig"
+endmenu

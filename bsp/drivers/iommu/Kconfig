@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-2.0-only
+menu "IOMMU Drivers"
+	depends on AW_BSP
+
+config AW_IOMMU
+       tristate "Allwinner IOMMU Support"
+       depends on AW_BSP
+       select ARM_DMA_USE_IOMMU if ARM
+       select IOMMU_SUPPORT
+       select IOMMU_API
+       select IOMMU_DMA
+       help
+         Support for the Allwinner IOMMU(System MMU) component. This
+         enables H/W multimedia accellerators to see non-linear physical
+         memory chunks as a linear memory in their address spaces.
+
+         If unsure, say N here.
+
+if AW_IOMMU
+choice
+       prompt "IOMMU verson"
+       default AW_IOMMU_V2
+
+config AW_IOMMU_V2
+       bool "V2"
+endchoice
+
+config AW_IOMMU_DISTRIBUTE
+       bool "IOMMU is distribute"
+       default n
+       default y if AW_IOMMU_V2
+endif
+
+endmenu

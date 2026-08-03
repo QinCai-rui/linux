@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+config AW_DRM_DSI_COMBOPHY
+	tristate "LVDS and MIPI DSI Combophy"
+	default n
+	help
+		If you want to support lvds dsi combophy, select it.

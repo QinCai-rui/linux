@@ -1,0 +1,25 @@
+name: sync-bsp
+
+on:
+  schedule:
+    - cron: "17 3 * * 1" # every Monday 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-bsp:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout linux kernel
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Synchronize bsp
+        run: ./scripts/sync-bsp.sh
+        env:
+          BSP_SOURCE: https://github.com/QinCai-rui/allwinner-bsp.git
+          BSP_BRANCH: linux-6.18.y
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

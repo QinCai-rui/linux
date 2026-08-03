@@ -10,6 +10,9 @@ NAME = Baby Opossum Posse
 # More info can be located in ./README
 # Comments in this file are targeted only to the developer, do not
 # expect to learn how to build the kernel reading this file.
+export BSP_TOP := bsp/
+export LICHEE_KERN_DIR := ./
+export KBUILD_DEFCONFIG := bsp.config
 
 ifeq ($(filter output-sync,$(.FEATURES)),)
 $(error GNU Make >= 4.0 is required. Your Make version is $(MAKE_VERSION))
@@ -583,6 +586,7 @@ LINUXINCLUDE    := \
 		-I$(objtree)/arch/$(SRCARCH)/include/generated \
 		-I$(srctree)/include \
 		-I$(objtree)/include \
+		-I$(srctree)/bsp/include \
 		$(USERINCLUDE)
 
 KBUILD_AFLAGS   := -D__ASSEMBLY__ -fno-PIE
@@ -797,6 +801,7 @@ ifeq ($(KBUILD_EXTMOD),)
 # Objects we will link into vmlinux / subdirs we need to visit
 core-y		:=
 drivers-y	:=
+drivers-y	+= bsp/
 libs-y		:= lib/
 endif # KBUILD_EXTMOD
 
@@ -1391,6 +1396,13 @@ PHONY += headers_install
 headers_install: headers
 	$(call cmd,headers_install)
 
+IS_AOSP = $(shell if [ -d "$(srctree)/android" ] && [ -n "$(KBUILD_EXTMOD)" ]; then echo "y"; fi)
+ifneq ($(IS_AOSP), y)
+	hdr-inst-bsp := -f $(srctree)/bsp/scripts/Makefile.headersinst obj
+else
+	hdr-inst-bsp := -f $(srctree)/bsp/scripts/Makefile.headersinst dst=$(KBUILD_EXTMOD)/usr/include/bsp obj
+endif
+
 PHONY += archheaders archscripts
 
 hdr-inst := -f $(srctree)/scripts/Makefile.headersinst obj
@@ -1402,6 +1414,9 @@ ifdef HEADER_ARCH
 else
 	$(Q)$(MAKE) $(hdr-inst)=include/uapi
 	$(Q)$(MAKE) $(hdr-inst)=arch/$(SRCARCH)/include/uapi
+endif
+ifneq ($(wildcard $(srctree)/bsp/scripts/Makefile.headersinst),)
+	$(Q)$(MAKE) $(hdr-inst-bsp)=bsp/include/uapi
 endif
 
 ifdef CONFIG_HEADERS_INSTALL
