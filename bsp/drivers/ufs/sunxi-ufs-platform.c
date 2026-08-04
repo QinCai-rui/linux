@@ -18,11 +18,7 @@
 #include <linux/reset.h>
 #include <linux/clk.h>
 #include <linux/version.h>
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(5, 18, 0))
 #include "../../../drivers/ufs/host/ufshcd-pltfrm.h"
-#else
-#include "../../../drivers/scsi/ufs/ufshcd-pltfrm.h"
-#endif
 #include "ufshcd-sunxi.h"
 #include "tc-dwc.h"
 #include "ufshci-sunxi.h"
@@ -30,7 +26,7 @@
 #include "sunxi-ufs.h"
 #include "sunxi-sid.h"
 
-#define SUNXI_UFS_DRIVER_VESION "0.0.18 2025.5.16 15:16"
+#define SUNXI_UFS_DRIVER_VESION "0.0.27 2026.05.16 15:20"
 //#define CCU_DBG
 #define SUNXI_UFS_AXI_CLK		(200*1000*1000)
 #define SUNXI_UFS_CAL_WORDS_EFUSE_ALIGN_LOW         (0x60)
@@ -74,6 +70,24 @@ static inline int sunxi_ufs_dump_ccu_reg(void)
 	return 0;
 #endif
 }
+
+/**
+ * sunxi_ufshcd_delay_us - delay for a specified number of microseconds
+ * Note: This function is ported from ufshcd.c because it is not in Android GKI whitelist
+ * @us: number of microseconds to delay
+ * @tolerance: tolerance value in microseconds
+ */
+static void sunxi_ufshcd_delay_us(unsigned long us, unsigned long tolerance)
+{
+	if (!us)
+		return;
+
+	if (us < 10)
+		udelay(us);
+	else
+		usleep_range(us, us + tolerance);
+}
+
 static inline int sunxi_ufs_get_cal_words(struct ufs_hba *hba, u32 *pll_rate_a, u32 *pll_rate_b, \
 										u32 *att_lane0, u32 *ctle_lane0, \
 										u32 *att_lane1, u32 *ctle_lane1)
@@ -83,7 +97,6 @@ static inline int sunxi_ufs_get_cal_words(struct ufs_hba *hba, u32 *pll_rate_a, 
 	int ret = 0;
 
 	dev_dbg(hba->dev, "Get ufs_cal_word_l\n");
-
 	ret = sunxi_get_module_param_from_sid(&rval_l, SUNXI_UFS_CAL_WORDS_EFUSE_ALIGN_LOW, 4);
 	if (ret) {
 		dev_err(hba->dev, "Get ufs_cal_word_l failed\n");
@@ -350,12 +363,12 @@ static int sunxi_ufs_rmmi_config(struct ufs_hba *hba)
 					DME_LOCAL },
 		{ UIC_ARG_MIB_SEL(RMMI_RXRHOLDCTRLOPT, SELIND_LN1_RX), 0x02,
 					DME_LOCAL },
-#if 1
+
 		{ UIC_ARG_MIB(EXT_COARSE_TUNE_RATEA), 0x2,
 					DME_LOCAL },/*reset value 0x2*/
 		{ UIC_ARG_MIB(EXT_COARSE_TUNE_RATEB), 0x80,
 					DME_LOCAL },/*reset value 0x80*/
-#endif
+
 		{ UIC_ARG_MIB(RMMI_CBCRCTRL), 0x01, DME_LOCAL },
 		{ UIC_ARG_MIB(VS_MPHYCFGUPDT), 0x01, DME_LOCAL },
 	};
@@ -733,16 +746,22 @@ out:
 	return err;
 }
 
-
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(7, 1, 0))
 static int sunxi_ufs_pre_pwr_change(struct ufs_hba *hba,
 				  const struct ufs_pa_layer_attr *dev_max_params,
 				  struct ufs_pa_layer_attr *dev_req_params)
+#else
+static int sunxi_ufs_pre_pwr_change(struct ufs_hba *hba,
+				  const struct ufs_pa_layer_attr *dev_max_params,
+				  struct ufs_pa_layer_attr *dev_req_params)
+#endif
 {
-	struct ufs_host_params host_cap;
 	int ret;
 	struct ufs_sunxi_priv *priv = hba->priv;
+	struct ufs_host_params host_cap;
 
 	ufshcd_init_host_params(&host_cap);
+
 	host_cap.hs_rx_gear = UFS_HS_G4;
 	host_cap.hs_tx_gear = UFS_HS_G4;
 	host_cap.hs_rate = priv->phy_hs_rate;
@@ -750,6 +769,7 @@ static int sunxi_ufs_pre_pwr_change(struct ufs_hba *hba,
 	ret = ufshcd_negotiate_pwr_params(&host_cap,
 				       dev_max_params,
 				       dev_req_params);
+
 	if (ret) {
 		pr_info("%s: failed to determine capabilities\n",
 			__func__);
@@ -767,6 +787,27 @@ static int sunxi_ufs_pre_pwr_change(struct ufs_hba *hba,
 out:
 	return ret;
 }
+
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(7, 1, 0))
+/**
+ * sunxi_ufs_negotiate_pwr_mode - negotiate power mode parameters
+ * @hba: per-adapter instance
+ * @dev_max_params: device maximum power capabilities
+ * @dev_req_params: negotiated power parameters (output)
+ *
+ * This callback is invoked by the UFS core to negotiate power mode
+ * parameters between host capabilities and device capabilities.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+static int sunxi_ufs_negotiate_pwr_mode(struct ufs_hba *hba,
+					const struct ufs_pa_layer_attr *dev_max_params,
+					struct ufs_pa_layer_attr *dev_req_params)
+{
+	return sunxi_ufs_pre_pwr_change(hba, dev_max_params, dev_req_params);
+}
+#endif
 
 
 /**
@@ -800,11 +841,16 @@ static void ufshcd_print_pwr_info(struct ufs_hba *hba, struct ufs_pa_layer_attr 
 }
 
 
-
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(7, 1, 0))
 static int sunxi_ufs_pwr_change_notify(struct ufs_hba *hba,
 				     enum ufs_notify_change_status stage,
 				     const struct ufs_pa_layer_attr *dev_max_params,
 				     struct ufs_pa_layer_attr *dev_req_params)
+#else
+static int sunxi_ufs_pwr_change_notify(struct ufs_hba *hba,
+				     enum ufs_notify_change_status stage,
+				     struct ufs_pa_layer_attr *dev_req_params)
+#endif
 {
 	int ret = 0;
 
@@ -813,10 +859,14 @@ static int sunxi_ufs_pwr_change_notify(struct ufs_hba *hba,
 	dev_dbg(hba->dev, "pm lvl 5:ufs power down and link off\n");
 
 	switch (stage) {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(7, 1, 0))
 	case PRE_CHANGE:
 		ret = sunxi_ufs_pre_pwr_change(hba, dev_max_params,
 					     dev_req_params);
 		break;
+#else
+	case PRE_CHANGE:
+#endif
 	case POST_CHANGE:
 		ufshcd_print_pwr_info(hba, dev_req_params);
 		break;
@@ -862,49 +912,10 @@ static void sunxi_ufs_hibern8_notify(struct ufs_hba *hba, enum uic_cmd_dme cmd,
 static inline struct scsi_device *sunxi_hba_to_wlun(struct ufs_hba *hba)
 {
 	struct scsi_device *sdp;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
 	sdp = hba->ufs_device_wlun;
-#else
-	sdp = hba->sdev_ufs_device;
-#endif
 	return sdp;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 98)
-static int sunxi_ufs_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
-{
-	int ret = 0;
-	if (pm_op == UFS_SYSTEM_PM) {
-		struct scsi_device *sdp;
-		unsigned long flags;
-
-		spin_lock_irqsave(hba->host->host_lock, flags);
-		sdp = sunxi_hba_to_wlun(hba);
-		if (sdp && scsi_device_online(sdp))
-			ret = scsi_device_get(sdp);
-		else
-			ret = -ENODEV;
-		spin_unlock_irqrestore(hba->host->host_lock, flags);
-
-		if (ret) {
-			dev_err(hba->dev, "sunxi ufs suspend scsi device get faile\n");
-			goto out;
-		}
-
-		/*disable uevent to avoid netlink(cause by ufs device UAC) to resmue systme**/
-		dev_set_uevent_suppress(&sdp->sdev_gendev, true);
-		dev_dbg(hba->dev, "disable uevent\n");
-		scsi_device_put(sdp);
-		sunxi_ufs_sys_clk_deinit(hba);
-	} else {
-		dev_err(hba->dev, "Unsupport pm_op %x\nr", pm_op);
-		ret = -EINVAL;
-	}
-
-out:
-	return ret;
-}
-#else
 static int sunxi_ufs_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 					enum ufs_notify_change_status status)
 {
@@ -945,7 +956,6 @@ static int sunxi_ufs_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 out:
 	return ret;
 }
-#endif
 
 static int sunxi_ufs_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
@@ -1057,7 +1067,7 @@ static int sunxi_ufs_hce_enable_notify(struct ufs_hba *hba,
 			 * instruction might be read back.
 			 * This delay can be changed based on the controller.
 			 */
-			ufshcd_delay_us(hba->vps->hba_enable_delay_us, 100);
+			sunxi_ufshcd_delay_us(hba->vps->hba_enable_delay_us, 100);
 
 			/* wait for the host controller to complete initialization */
 			retry_inner = 50;
@@ -1300,7 +1310,7 @@ static int sunxi_ufs_sys_clk_init(struct ufs_hba *hba)
 	int rval = 0;
 	u32 rate = 0;
 	priv = hba->priv;
-#if 1
+
 	/*Only to avoid waring when disable clk and rst if no enable first*
 	 *Start
 	 * */
@@ -1349,7 +1359,7 @@ static int sunxi_ufs_sys_clk_init(struct ufs_hba *hba)
 	//dev_err(hba->dev, "%s,%d\n", __FUNCTION__, __LINE__);
 
 	//sunxi_ufs_dump_ccu_reg();
-#endif
+
 	dev_dbg(hba->dev, "sys clk init\n");
 
 	rval = clk_prepare_enable(priv->clk[SUNXI_UFS_CFG_CLK_GATING].uclk);
@@ -1415,12 +1425,24 @@ static int sunxi_ufs_sys_clk_init(struct ufs_hba *hba)
 	}
 	dev_dbg(hba->dev, "ahb axi clk rst deassert\n");
 
+	/* ref clk gating for host */
+	if (!IS_ERR(priv->clk[SUNXI_RTC_DCXO_UFS_GATING].uclk)) {
+		rval = clk_prepare_enable(priv->clk[SUNXI_RTC_DCXO_UFS_GATING].uclk);
+		if (rval) {
+			dev_err(hba->dev, "Enable rtc dcxo ufs gating %d\n", rval);
+			return -1;
+		}
+		dev_dbg(hba->dev, "enable rtc dcxo ufs gating\n");
+	}
+
+	/* ref clk for device */
 	rval = clk_prepare_enable(priv->clk[SUNXI_RTC_DCXO_WAKEUP].uclk);
 	if (rval) {
 		dev_err(hba->dev, "Enable rtc dcxo wakeup %d\n", rval);
 		return -1;
 	}
 	dev_dbg(hba->dev, "enable rtc dcxo wakeup\n");
+
 	//sunxi_ufs_dump_ccu_reg();
 
 	return 0;
@@ -1571,7 +1593,7 @@ static int sunxi_ufs_host_top_init(struct ufs_hba *hba)
 	reg_val |= 0x1;
 	ufshcd_writel(hba, reg_val, REG_UFS_PD_CTRL);
 
-	ret = ufshcd_wait_for_register(hba, REG_UFS_PD_STAT, \
+	ret = sunxi_ufshcd_wait_for_register(hba, REG_UFS_PD_STAT, \
 			TRANS_CPT, TRANS_CPT, 20);
 	if (ret) {
 		dev_err(hba->dev, "%s: wait powr on timeout\n", __func__);
@@ -1620,7 +1642,7 @@ static void sunxi_ufs_host_exit(struct ufs_hba *hba)
 	reg_val |= 0x2;
 	ufshcd_writel(hba, reg_val, REG_UFS_PD_CTRL);
 
-	ret = ufshcd_wait_for_register(hba, REG_UFS_PD_STAT, \
+	ret = sunxi_ufshcd_wait_for_register(hba, REG_UFS_PD_STAT, \
 				TRANS_CPT, TRANS_CPT, 20);
 	if (ret) {
 		dev_err(hba->dev, "%s: wait powr off timeout\n", __func__);
@@ -1663,6 +1685,8 @@ static int sunxi_ufs_sys_clk_deinit(struct ufs_hba *hba)
 	reset_control_assert(priv->rst[SUNXI_UFS_CORE_RST].urst);
 
 	clk_disable_unprepare(priv->clk[SUNXI_RTC_DCXO_WAKEUP].uclk);
+	if (!IS_ERR(priv->clk[SUNXI_RTC_DCXO_UFS_GATING].uclk))
+		clk_disable_unprepare(priv->clk[SUNXI_RTC_DCXO_UFS_GATING].uclk);
 	clk_disable_unprepare(priv->clk[SUNXI_UFS_AXI_CLK_GATING].uclk);
 	reset_control_assert(priv->rst[SUNXI_UFS_AXI_RST].urst);
 
@@ -1741,8 +1765,14 @@ static int ufs_ufs_parse_dt(struct device *dev, struct ufs_hba *hba)
 		if (!priv->clk[i].name)
 			continue;
 		ret = ufs_sunxi_get_clk_ctrl(dev, &priv->clk[i]);
-		if (ret)
-			goto out;
+		if (ret) {
+			if (!strcmp(priv->clk[i].name, "dcxo_ufs_gating")) {
+				dev_err(dev, "clk:%s not found, please check it\n", priv->clk[i].name);
+				ret = 0;
+			} else {
+				goto out;
+			}
+		}
 	}
 
 #ifdef USE_UNUSED_CODE
@@ -1781,7 +1811,10 @@ static struct ufs_sunxi_priv sunxi_ufs_host_priv = {
 	.clk[SUNXI_MSI_LITE_GATE] = { .name = "msi_lite", },
 	.clk[SUNXI_STORE_AHB_GATE] = { .name = "store_ahb", },
 	.clk[SUNXI_STORE_MBUS_GATE] = { .name = "store_mbus", },
+	/* This clock reg description may vary across platforms,
+	 * but its function is to provide reference clock for device */
 	.clk[SUNXI_RTC_DCXO_WAKEUP] = { .name = "dcxo_wakeup", },
+	.clk[SUNXI_RTC_DCXO_UFS_GATING] = { .name = "dcxo_ufs_gating", },
 	.phy_hs_rate = PA_HS_MODE_B,
 };
 
@@ -1929,6 +1962,9 @@ static struct ufs_hba_variant_ops sunxi_ufs_v0_pltfm_hba_vops = {
 	.exit = sunxi_ufs_host_exit,
 	.hce_enable_notify = sunxi_ufs_hce_enable_notify,
 	.link_startup_notify = sunxi_ufs_link_startup_notify,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(7, 1, 0))
+	.negotiate_pwr_mode = sunxi_ufs_negotiate_pwr_mode,
+#endif
 	.pwr_change_notify = sunxi_ufs_pwr_change_notify,
 	.phy_initialization = sunxi_ufs_phy_config,
 	.device_reset = sunxi_ufs_device_reset,
@@ -1985,6 +2021,7 @@ static void sunxi_ufs_pltfm_remove(struct platform_device *pdev)
 
 	pm_runtime_get_sync(&(pdev)->dev);
 	ufshcd_remove(hba);
+	return;
 }
 
 static const struct dev_pm_ops sunxi_ufs_pltfm_pm_ops = {
